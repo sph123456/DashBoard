@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>投放日报看板</title>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #e2e8f0; padding: 20px; }
+.header { text-align: center; margin-bottom: 24px; }
+.header h1 { font-size: 28px; font-weight: 600; margin-bottom: 8px; }
+.header p { color: #94a3b8; font-size: 14px; }
+.filters { background: #1e293b; border-radius: 12px; padding: 20px; margin-bottom: 24px; }
+.filter-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 16px; }
+.filter-row:last-child { margin-bottom: 0; }
+.filter-label { font-size: 14px; color: #94a3b8; min-width: 60px; }
+.btn-group { display: flex; gap: 8px; }
+.btn { padding: 8px 16px; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; transition: all .2s; }
+.btn-quarter { background: #334155; color: #e2e8f0; }
+.btn-quarter.active { background: #3b82f6; color: #fff; }
+.btn-month { background: #334155; color: #e2e8f0; }
+.btn-month.active { background: #6366f1; color: #fff; }
+select { padding: 8px 12px; background: #334155; color: #e2e8f0; border: 1px solid #475569; border-radius: 8px; font-size: 14px; min-width: 120px; }
+.kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }
+.kpi-card { background: linear-gradient(135deg, #1e293b, #334155); border-radius: 12px; padding: 20px; text-align: center; }
+.kpi-value { font-size: 32px; font-weight: 700; color: #fff; margin-bottom: 4px; }
+.kpi-label { font-size: 14px; color: #94a3b8; }
+.charts-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 24px; }
+.chart-full { grid-column: 1 / -1; }
+.chart-card { background: #1e293b; border-radius: 12px; padding: 20px; }
+.chart-title { font-size: 16px; font-weight: 600; margin-bottom: 16px; color: #e2e8f0; }
+.chart { height: 300px; }
+.chart-sm { height: 250px; }
+@media (max-width: 768px) { .charts-grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="header">
+    <h1>📊 投放日报看板</h1>
+    <p>数据更新时间: __UPDATE_TIME__</p>
+</div>
+
+<div class="filters">
+    <div class="filter-row">
+        <span class="filter-label">季度</span>
+        <div class="btn-group">
+            <button class="btn btn-quarter" data-quarter="Q1">Q1 (1-3月)</button>
+            <button class="btn btn-quarter active" data-quarter="Q2">Q2 (4-6月)</button>
+        </div>
+    </div>
+    <div class="filter-row">
+        <span class="filter-label">月份</span>
+        <div class="btn-group" id="monthFilters"></div>
+    </div>
+    <div class="filter-row">
+        <span class="filter-label">渠道</span>
+        <select id="channelFilter">
+            <option value="">全部渠道</option>
+            __CHANNEL_OPTIONS__
+        </select>
+        <span class="filter-label" style="margin-left: 20px;">城市</span>
+        <select id="cityFilter">
+            <option value="">全部城市</option>
+            __CITY_OPTIONS__
+        </select>
+    </div>
+</div>
+
+<div class="kpi-grid" id="kpiGrid"></div>
+
+<div class="charts-grid">
+    <div class="chart-card chart-full">
+        <div class="chart-title">💰 消费趋势</div>
+        <div class="chart" id="chartConsume"></div>
+    </div>
+    <div class="chart-card">
+        <div class="chart-title">📈 线索趋势</div>
+        <div class="chart" id="chartLeads"></div>
+    </div>
+    <div class="chart-card">
+        <div class="chart-title">💵 成本趋势</div>
+        <div class="chart" id="chartCost"></div>
+    </div>
+    <div class="chart-card chart-full">
+        <div class="chart-title">🏙️ 各城市消费占比</div>
+        <div class="chart-sm" id="chartCityPie"></div>
+    </div>
+    <div class="chart-card chart-full">
+        <div class="chart-title">📊 渠道消费对比</div>
+        <div class="chart" id="chartChannelBar"></div>
+    </div>
+</div>
+
+<script>
+const monthlyData = __MONTHLY_DATA__;
+const cityMonthlyData = __CITY_MONTHLY_DATA__;
+const q1Months = __Q1_MONTHS__;
+const q2Months = __Q2_MONTHS__;
+const allMonths = __ALL_MONTHS__;
+
+let currentQuarter = 'Q2';
+let selectedMonths = [];
+let selectedChannel = '';
+let selectedCity = '';
+
+function updateMonthFilters() {
+    const container = document.getElementById('monthFilters');
+    const months = currentQuarter === 'Q1' ? q1Months : q2Months;
+    const availableMonths = months.filter(m => allMonths.includes(m));
+    container.innerHTML = availableMonths.map(m =>
+        '<button class="btn btn-month" data-month="' + m + '">' + m + '</button>'
+    ).join('');
+    document.querySelectorAll('.btn-month').forEach(btn => {
+        btn.classList.toggle('active', selectedMonths.includes(btn.dataset.month));
+        btn.onclick = () => {
+            const m = btn.dataset.month;
+            if (selectedMonths.includes(m)) {
+                selectedMonths = selectedMonths.filter(x => x !== m);
+            } else {
+                selectedMonths = [...selectedMonths, m];
+            }
+            btn.classList.toggle('active', selectedMonths.includes(m));
+            updateDashboard();
+        };
+    });
+}
+
+document.querySelectorAll('.btn-quarter').forEach(btn => {
+    btn.onclick = () => {
+        document.querySelectorAll('.btn-quarter').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentQuarter = btn.dataset.quarter;
+        selectedMonths = currentQuarter === 'Q1' ? [...q1Months] : [...q2Months];
+        updateMonthFilters();
+        updateDashboard();
+    };
+});
+
+document.getElementById('channelFilter').onchange = e => { selectedChannel = e.target.value; updateDashboard(); };
+document.getElementById('cityFilter').onchange = e => { selectedCity = e.target.value; updateDashboard(); };
+
+function filterData() {
+    let filtered = monthlyData;
+    if (selectedMonths.length) {
+        filtered = filtered.filter(d => selectedMonths.includes(d.month.replace('0', '').replace('-', '')));
+    }
+    if (selectedChannel) {
+        filtered = filtered.filter(d => d.channel === selectedChannel);
+    }
+    if (selectedCity) {
+        const cityMonthly = cityMonthlyData.filter(d => d.city === selectedCity);
+        const months = [...new Set(cityMonthly.map(d => d.month))];
+        filtered = filtered.filter(d => months.includes(d.month));
+    }
+    return filtered;
+}
+
+function filterCityData() {
+    let filtered = cityMonthlyData;
+    if (selectedMonths.length) {
+        filtered = filtered.filter(d => selectedMonths.includes(d.month.replace('0', '').replace('-', '')));
+    }
+    if (selectedCity) {
+        filtered = filtered.filter(d => d.city === selectedCity);
+    }
+    return filtered;
+}
+
+function calcKPI(data) {
+    const total = data.reduce((s, d) => ({
+        consume: s.consume + d.消费,
+        leads: s.leads + d.线索数,
+        validLeads: s.validLeads + d.有效线索,
+        cost: s.cost + d.线索成本,
+    }), {consume: 0, leads: 0, validLeads: 0, cost: 0});
+    const n = data.length || 1;
+    return {
+        consume: total.consume,
+        leads: total.leads,
+        validLeads: total.validLeads,
+        cost: total.cost / n
+    };
+}
+
+function renderKPI(data) {
+    const kpi = calcKPI(data);
+    document.getElementById('kpiGrid').innerHTML = 
+        '<div class="kpi-card"><div class="kpi-value">' + (kpi.consume / 10000).toFixed(1) + '万</div><div class="kpi-label">总消费</div></div>' +
+        '<div class="kpi-card"><div class="kpi-value">' + kpi.leads.toFixed(0) + '</div><div class="kpi-label">总线索数</div></div>' +
+        '<div class="kpi-card"><div class="kpi-value">' + kpi.validLeads.toFixed(0) + '</div><div class="kpi-label">有效线索</div></div>' +
+        '<div class="kpi-card"><div class="kpi-value">' + kpi.cost.toFixed(0) + '元</div><div class="kpi-label">平均线索成本</div></div>';
+}
+
+const charts = {};
+function initCharts() {
+    ['chartConsume', 'chartLeads', 'chartCost', 'chartCityPie', 'chartChannelBar'].forEach(id => {
+        charts[id] = echarts.init(document.getElementById(id));
+    });
+}
+
+function renderCharts(data, cityData) {
+    const months = [...new Set(data.map(d => d.month))].sort();
+    const channelList = [...new Set(data.map(d => d.channel))];
+
+    charts['chartConsume'].setOption({
+        tooltip: {trigger: 'axis'},
+        legend: {data: channelList, textStyle: {color: '#94a3b8'}},
+        xAxis: {type: 'category', data: months, axisLine: {lineStyle: {color: '#475569'}}, axisLabel: {color: '#94a3b8'}},
+        yAxis: {type: 'value', axisLine: {show: false}, splitLine: {lineStyle: {color: '#334155'}}, axisLabel: {color: '#94a3b8', formatter: function(v) {return (v / 10000).toFixed(0) + '万';}}},
+        series: channelList.map(ch => ({
+            name: ch, type: 'line', smooth: true,
+            data: months.map(m => { const d = data.find(x => x.month === m && x.channel === ch); return d ? d.消费 : 0; })
+        }))
+    });
+
+    charts['chartLeads'].setOption({
+        tooltip: {trigger: 'axis'},
+        legend: {data: channelList, textStyle: {color: '#94a3b8'}},
+        xAxis: {type: 'category', data: months, axisLine: {lineStyle: {color: '#475569'}}, axisLabel: {color: '#94a3b8'}},
+        yAxis: {type: 'value', axisLine: {show: false}, splitLine: {lineStyle: {color: '#334155'}}, axisLabel: {color: '#94a3b8'}},
+        series: channelList.map(ch => ({
+            name: ch, type: 'bar',
+            data: months.map(m => { const d = data.find(x => x.month === m && x.channel === ch); return d ? d.线索数 : 0; })
+        }))
+    });
+
+    charts['chartCost'].setOption({
+        tooltip: {trigger: 'axis'},
+        legend: {data: channelList, textStyle: {color: '#94a3b8'}},
+        xAxis: {type: 'category', data: months, axisLine: {lineStyle: {color: '#475569'}}, axisLabel: {color: '#94a3b8'}},
+        yAxis: {type: 'value', axisLine: {show: false}, splitLine: {lineStyle: {color: '#334155'}}, axisLabel: {color: '#94a3b8'}},
+        series: channelList.map(ch => ({
+            name: ch, type: 'line', smooth: true,
+            data: months.map(m => { const d = data.find(x => x.month === m && x.channel === ch); return d ? d.线索成本 : 0; })
+        }))
+    });
+
+    const citySum = {};
+    cityData.forEach(d => { citySum[d.city] = (citySum[d.city] || 0) + d.消费; });
+    const cityPie = Object.entries(citySum).map(([name, value]) => ({name, value}));
+    charts['chartCityPie'].setOption({
+        tooltip: {trigger: 'item', formatter: '{b}: {c} ({d}%)'},
+        series: [{type: 'pie', radius: ['40%', '70%'], avoidLabelOverlap: false,
+            itemStyle: {borderRadius: 10, borderColor: '#1e293b', borderWidth: 2},
+            label: {show: true, formatter: '{b}', color: '#e2e8f0'},
+            data: cityPie
+        }]
+    });
+
+    const channelSum = {};
+    data.forEach(d => { channelSum[d.channel] = (channelSum[d.channel] || 0) + d.消费; });
+    const channelBar = Object.entries(channelSum).map(([name, value]) => ({name, value})).sort((a, b) => b.value - a.value);
+    charts['chartChannelBar'].setOption({
+        tooltip: {trigger: 'axis'},
+        xAxis: {type: 'value', axisLine: {show: false}, splitLine: {lineStyle: {color: '#334155'}}, axisLabel: {color: '#94a3b8', formatter: function(v) {return (v / 10000).toFixed(0) + '万';}}},
+        yAxis: {type: 'category', data: channelBar.map(d => d.name), axisLine: {lineStyle: {color: '#475569'}}, axisLabel: {color: '#94a3b8'}},
+        series: [{type: 'bar', data: channelBar.map(d => d.value), itemStyle: {color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
+            {offset: 0, color: '#6366f1'}, {offset: 1, color: '#8b5cf6'}
+        ])}, borderRadius: [0, 4, 4, 0]}]
+    });
+}
+
+function updateDashboard() {
+    const filtered = filterData();
+    const cityFiltered = filterCityData();
+    renderKPI(filtered);
+    renderCharts(filtered, cityFiltered);
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    initCharts();
+    selectedMonths = currentQuarter === 'Q1' ? [...q1Months] : [...q2Months];
+    updateMonthFilters();
+    updateDashboard();
+    window.addEventListener('resize', () => Object.values(charts).forEach(c => c.resize()));
+});
+</script>
+</body>
+</html>

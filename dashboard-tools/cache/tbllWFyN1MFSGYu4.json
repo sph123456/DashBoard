@@ -1,7 +1,4 @@
 {
-  "table_name": "线上整体分城市分渠道ByDay",
-  "table_id": "tbllWFyN1MFSGYu4",
-  "count": 4632,
   "records": [
     {
       "fields": {
@@ -134331,5 +134328,6 @@
       "id": "recvgbjdB9Uz1W",
       "record_id": "recvgbjdB9Uz1W"
     }
-  ]
+  ],
+  "total": 4632
 }

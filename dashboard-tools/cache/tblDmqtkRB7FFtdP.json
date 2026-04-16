@@ -1,7 +1,4 @@
 {
-  "table_name": "线上整体分城市数据ByMonth",
-  "table_id": "tblDmqtkRB7FFtdP",
-  "count": 13,
   "records": [
     {
       "fields": {
@@ -211,5 +208,6 @@
       "id": "recvej7sVVAg8d",
       "record_id": "recvej7sVVAg8d"
     }
-  ]
+  ],
+  "total": 13
 }
